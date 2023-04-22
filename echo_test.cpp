@@ -9,6 +9,7 @@
 #include <chrono>
 #include <thread>
 
+#include <stdlib.h>
 #include <linux/rpmsg.h>
 #include <sys/ioctl.h>
 #include <fcntl.h>
@@ -226,12 +227,14 @@ unsigned char GetCRC8(const std::string &message)
  * @return         送信成功/失敗
  */
 bool SendMessage(std::string message) {
-	int ret;
+	//int ret;
 
 	// CRC値の追加
 	std::ostringstream crc;
 	crc << std::setfill('0') << std::setw(3)<< (int)GetCRC8(message);
 	message += ",CRC:" + crc.str() + "\n";
+
+	return true;
 
 }
 
@@ -244,19 +247,32 @@ int main(int argc, char *argv[])
 
 	/* メッセージの送信 */
 	std::fstream fs_ept_dev;
-	string str;
+	string str_out, str_in;
 	
 	fs_ept_dev.open(fp_ep_dev.str(), std::ios_base::in | std::ios_base::out);
 	for (int i = 0; i < 1000; i++)
 	{
-		str = "#MBJAZ#,JTX2,NO:02,FND:01,DEV:+200,DST:0500,EDG:0000,TT2:03,DV2:+056,DT2:0340,TT3:01,DV3:+153,DT3:0450​";
-		crc8 = GetCRC8(str);
-		str += ",CRC:" + std::to_string(int(crc8));
-		fs_ept_dev << str << std::endl;
+		// テストメッセージの生成
+		std::ostringstream dst;
+		dst << std::setfill('0') << std::setw(4)<< i;
+		str_out = "#MBJAZ#,JTX2,NO:02,FND:01,DEV:+200,DST:" + dst.str() + ",EDG:0000,TT2:03,DV2:+056,DT2:0340,TT3:01,DV3:+153,DT3:0450​";
+		//str_out = "#MBJAZ#,JTX2,NO:02,FND:01,DEV:+200,DST:0500,EDG:0000,TT2:03,DV2:+056,DT2:0340,TT3:01,DV3:+153,DT3:0450​";
+
+		// CRC値の追加
+		std::ostringstream crc;
+		crc << std::setfill('0') << std::setw(3)<< (int)GetCRC8(message);
+		str_out += ",CRC:" + crc.str() + "\n";
+
+		// メッセージの送信
+		fs_ept_dev << str_out << std::endl;
 		fs_ept_dev.flush();
 
-		std::getline(fs_ept_dev, str);
-		std::cout << str << std::endl;
+		// メッセージの取得
+		std::getline(fs_ept_dev, str_in);
+
+		// 結果の表示
+		std::cout << "str_out: " << str_out << std::endl;
+		std::cout << "str_in : " <<str_in << std::endl;
 
 		std::this_thread::sleep_for(std::chrono::milliseconds(100));
 	}
