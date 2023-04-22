@@ -260,7 +260,7 @@ int main(int argc, char *argv[])
 
 		// CRC値の追加
 		std::ostringstream crc;
-		crc << std::setfill('0') << std::setw(3)<< (int)GetCRC8(message);
+		crc << std::setfill('0') << std::setw(3)<< (int)GetCRC8(str_out);
 		str_out += ",CRC:" + crc.str() + "\n";
 
 		// メッセージの送信
