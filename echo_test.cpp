@@ -5,9 +5,10 @@
 #include <filesystem>
 #include <cstring>
 #include <climits>
-
+#include <vector>
 #include <chrono>
 #include <thread>
+#include <map>
 
 #include <stdlib.h>
 #include <linux/rpmsg.h>
@@ -19,8 +20,8 @@ using std::string;
 
 /**
  * RPMsgを初期化する関数
- * @param	fp_ep_dev	RPMsgエンドポイントへのパス
- * @return         		初期化失敗で負の値を返す
+ * @param[in]	fp_ep_dev	RPMsgエンドポイントへのパス
+ * @return		初期化失敗で負の値を返す
  */
 int init_rpmsg(std::ostringstream &fp_ep_dev)
 {
@@ -191,10 +192,10 @@ int init_rpmsg(std::ostringstream &fp_ep_dev)
 
 /**
  * 文字列のCRC値(8bit)を計算する関数
- * @param  message CRC値(8bit)を計算する文字列
- * @return         CRC値(8bit)
+ * @param[in]	message CRC値(8bit)を計算する文字列
+ * @return		CRC値(8bit)
  */
-unsigned char GetCRC8(const std::string &message)
+unsigned char GetCRC8(const string &message)
 {
 	const int MSB_CRC8 = 0x85;
 	const char *p = message.c_str();
@@ -222,20 +223,62 @@ unsigned char GetCRC8(const std::string &message)
 }
 
 /**
- * メッセージをプライマリシリアルポートとセカンダリシリアルポートに同時に送信する関数
- * @param  message 送信するメッセージ
- * @return         送信成功/失敗
+ * 入力文字列を指定の区切り文字で分割する関数
+ * @param[in] message   入力文字列
+ * @param[in] delimiter 区切り文字
+ * @return 分割された文字列
  */
-bool SendMessage(std::string message)
+std::vector<string> SplitMessage(const string &str, const char &delimiter)
 {
-	// int ret;
+	std::vector<string> result;
+	std::stringstream ss{str};
+	string buf;
 
+	while (std::getline(ss, buf, delimiter))
+	{
+		result.push_back(buf);
+	}
+
+	return result;
+}
+
+/**
+ * R5へメッセージを送信する関数
+ * @param[in]	fp_ep_dev	RPMsgエンドポイントへのパス
+ * @param[in]	message 	送信するメッセージ
+ */
+void SendMessage(const std::ostringstream &fp_ep_dev, string message)
+{
 	// CRC値の追加
 	std::ostringstream crc;
 	crc << std::setfill('0') << std::setw(3) << (int)GetCRC8(message);
 	message += ",CRC:" + crc.str() + "\n";
 
-	return true;
+	// メッセージの送信
+	std::ofstream fs;
+	fs.open(fp_ep_dev.str());
+	fs << message << std::endl;
+	fs.close();
+}
+
+/**
+ * R5からメッセージを受信する関数
+ * @param[in]	fp_ep_dev	RPMsgエンドポイントへのパス
+ * @return		受信したメッセージ
+ */
+string ReceiveMessage(const std::ostringstream &fp_ep_dev)
+{
+	string message;
+	std::ifstream fs;
+
+	// メッセージの取得
+	fs.open(fp_ep_dev.str());
+	std::getline(fs, message);
+	fs.close();
+
+	// TODO: CRCチェック
+
+	return message;
 }
 
 int main(int argc, char *argv[])
@@ -251,33 +294,15 @@ int main(int argc, char *argv[])
 
 	for (int i = 0; i < 1000; i++)
 	{
-		auto start = std::chrono::system_clock::now(); // 計測スタート時刻を保存
-
-		fs_ept_dev.open(fp_ep_dev.str(), std::ios_base::in | std::ios_base::out);
 		// テストメッセージの生成
 		std::ostringstream dst;
 		dst << std::setfill('0') << std::setw(4) << i;
 		str_out = "#MBJAZ#,JTX2,NO:02,FND:01,DEV:+200,DST:" + dst.str() + ",EDG:0000,TT2:03,DV2:+056,DT2:0340,TT3:01,DV3:+153,DT3:0450​";
-		// str_out = "#MBJAZ#,JTX2,NO:02,FND:01,DEV:+200,DST:0500,EDG:0000,TT2:03,DV2:+056,DT2:0340,TT3:01,DV3:+153,DT3:0450​";
-
-		// CRC値の追加
-		std::ostringstream crc;
-		crc << std::setfill('0') << std::setw(3) << (int)GetCRC8(str_out);
-		str_out += ",CRC:" + crc.str();
-
-		// メッセージの送信
-		fs_ept_dev << str_out << std::endl;
-		fs_ept_dev.flush();
+		SendMessage(fp_ep_dev, str_out);
 
 		// メッセージの取得
 		str_in = "";
-		std::getline(fs_ept_dev, str_in);
-		fs_ept_dev.close();
-
-		auto end = std::chrono::system_clock::now(); // 計測終了時刻を保存
-		auto dur = end - start;						 // 要した時間を計算
-		auto micro_sec = std::chrono::duration_cast<std::chrono::microseconds>(dur).count();
-		std::cout << "sending: " << micro_sec / 1000.0 << " ms \n";
+		str_in = ReceiveMessage(fp_ep_dev);
 
 		// 結果の表示
 		std::cout << "str_out: " << str_out << std::endl;
@@ -285,7 +310,6 @@ int main(int argc, char *argv[])
 		std::cout << std::endl;
 
 		std::this_thread::sleep_for(std::chrono::milliseconds(100));
-
 	}
 
 	return 0;
