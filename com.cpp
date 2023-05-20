@@ -167,7 +167,6 @@ int init_rpmsg(std::ostringstream &fp_ep_dev)
 	return 0;
 }
 
-
 unsigned char GetCRC8(const string &message)
 {
 	const int MSB_CRC8 = 0x85;
@@ -194,7 +193,6 @@ unsigned char GetCRC8(const string &message)
 
 	return crc8;
 }
-
 
 std::vector<string> SplitMessage(const string &str, const char &delimiter)
 {
@@ -224,18 +222,39 @@ void SendMessage(const std::ostringstream &fp_ep_dev, string message)
 	fs.close();
 }
 
-
 string ReceiveMessage(const std::ostringstream &fp_ep_dev)
 {
 	string message;
-	std::ifstream fs;
+	
 
 	// メッセージの取得
-	fs.open(fp_ep_dev.str());
-	std::getline(fs, message);
-	fs.close();
+	// fs.open(fp_ep_dev.str());
+	// std::cout << "opened."<< std::endl;
+	// std::getline(fs, message);
+	// std::cout << "read."<< std::endl;
+	// fs.close();
+	// std::cout << "closed."<< std::endl;
+
+	// メッセージの取得
+	std::future<string> future = std::async(std::launch::async, [&]() {
+		std::ifstream fs;
+		string msg;
+		fs.open(fp_ep_dev.str());
+		std::getline(fs, msg);
+		fs.close();
+		return msg;
+	});
+
+	// タイムアウト処理
+	if (future.wait_for(std::chrono::milliseconds(100)) == std::future_status::timeout) {
+		std::cout << "Timeout occurred\n";
+		message = "";
+	} else {
+		message = future.get();
+	}
 
 	// TODO: CRCチェック
 
+	std::cout << "!!!\n";
 	return message;
 }

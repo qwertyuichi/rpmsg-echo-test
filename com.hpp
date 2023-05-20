@@ -12,6 +12,7 @@
 #include <chrono>
 #include <thread>
 #include <map>
+#include <future>
 
 #include <stdlib.h>
 #include <linux/rpmsg.h>

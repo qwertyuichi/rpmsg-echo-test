@@ -19,15 +19,16 @@ int main(int argc, char *argv[])
 		// テストメッセージの生成
 		std::ostringstream dst;
 		dst << std::setfill('0') << std::setw(4) << i;
-		str_out = "#MBJAZ#,JTX2,NO:02,FND:01,DEV:+200,DST:" + dst.str() + ",EDG:0000,TT2:03,DV2:+056,DT2:0340,TT3:01,DV3:+153,DT3:0450​";
+		str_out = "#MSG#,FV4C,NO:10,FND:01,DEV:+123,DST:" + dst.str();
 		SendMessage(fp_ep_dev, str_out);
+		std::cout << "str_out: " << str_out << std::endl;
 
 		// メッセージの取得
 		str_in = "";
 		str_in = ReceiveMessage(fp_ep_dev);
+		std::cout << "!!!!!\n";
 
 		// 結果の表示
-		std::cout << "str_out: " << str_out << std::endl;
 		std::cout << "str_in : " << str_in << std::endl;
 		std::cout << std::endl;
 
