@@ -1,6 +1,60 @@
 #include "com.hpp"
 
-int init_rpmsg(std::ostringstream &fp_ep_dev)
+CommunicationWithR5::CommunicationWithR5()
+{
+	int ret = init_rpmsg(fp_ep_dev);
+	if (ret < 0)
+		throw std::runtime_error("Error: cannot initialize RPMsg");
+}
+
+void CommunicationWithR5::SendMessage(string message)
+{
+	// CRC値の追加
+	std::ostringstream crc;
+	crc << std::setfill('0') << std::setw(3) << (int)GetCRC8(message);
+	message += ",CRC:" + crc.str() + "\n";
+
+	// メッセージの送信
+	std::ofstream fs;
+	fs.open(fp_ep_dev.str());
+	fs << message << std::endl;
+	fs.close();
+}
+
+string CommunicationWithR5::ReceiveMessage()
+{
+	string message;
+
+	// メッセージの取得
+	std::ifstream fs;
+	fs.open(fp_ep_dev.str());
+	std::getline(fs, message);
+	fs.close();
+
+	// CRC値の取得
+	std::vector<string> fields = SplitMessage(message, ',');
+	int crc8 = stoi(SplitMessage(fields.back(), ':').back());
+
+	// CRCなしのメッセージを取得
+	fields.pop_back();
+	string message_without_crc = "";
+	for (auto field : fields)
+	{
+		message_without_crc += field;
+		if (field != fields.back())
+		{
+			message_without_crc += ",";
+		}
+	}
+
+	// CRC値が一致しないときは空のメッセージを返す
+	if ((int)GetCRC8(message_without_crc) != crc8)
+		return "";
+
+	return message;
+}
+
+int CommunicationWithR5::init_rpmsg(std::ostringstream &fp_ep_dev)
 {
 	int ret;
 	const string RPMSG_DEV_NAME = "virtio0.rpmsg-openamp-demo-channel.-1.0";
@@ -59,13 +113,14 @@ int init_rpmsg(std::ostringstream &fp_ep_dev)
 	{
 		std::cout << "OK." << std::endl;
 		std::cout << "\t\t"
-				  << "Found rpmsg device: "
-				  << fp_device_name.str() << std::endl;
+				  << "Found rpmsg device: " << fp_device_name.str()
+				  << std::endl;
 	}
 
 	/* rpmsgデバイスドライバのオーバーライド設定 */
 	std::ostringstream fp_driver_override;
-	fp_driver_override << "/sys/bus/rpmsg/devices/" << RPMSG_DEV_NAME << "/driver_override";
+	fp_driver_override << "/sys/bus/rpmsg/devices/" << RPMSG_DEV_NAME
+					   << "/driver_override";
 	std::ofstream fs_driver_override(fp_driver_override.str());
 	fs_driver_override << "rpmsg_chrdev" << std::endl;
 	fs_driver_override.close();
@@ -84,7 +139,8 @@ int init_rpmsg(std::ostringstream &fp_ep_dev)
 	std::cout << "\t"
 			  << "Searching control device: ";
 	fp_rpmsg_dir << "/sys/bus/rpmsg/devices/" << RPMSG_DEV_NAME << "/rpmsg";
-	for (const auto &file : std::filesystem::directory_iterator(fp_rpmsg_dir.str()))
+	for (const auto &file :
+		 std::filesystem::directory_iterator(fp_rpmsg_dir.str()))
 	{
 		string file_name = file.path().filename();
 		if (file_name.find("rpmsg_ctrl") != string::npos)
@@ -93,8 +149,8 @@ int init_rpmsg(std::ostringstream &fp_ep_dev)
 			fp_rpmsg_ctrl << "/dev/" << rpmsg_ctrl_name;
 			std::cout << "OK." << std::endl;
 			std::cout << "\t\t"
-					  << "Found control device: "
-					  << rpmsg_ctrl_name << std::endl;
+					  << "Found control device: " << rpmsg_ctrl_name
+					  << std::endl;
 			break;
 		}
 	}
@@ -123,8 +179,7 @@ int init_rpmsg(std::ostringstream &fp_ep_dev)
 	{
 		std::cout << "OK." << std::endl;
 		std::cout << "\t\t"
-				  << "Created endpoint: "
-				  << ep_info.name << std::endl;
+				  << "Created endpoint: " << ep_info.name << std::endl;
 	}
 
 	/* RPMsgエンドポイントのデバイス名を取得 */
@@ -134,7 +189,8 @@ int init_rpmsg(std::ostringstream &fp_ep_dev)
 	for (int n = 0; n < 128; n++)
 	{
 		std::ostringstream sys_rpmsg_ep_name_path;
-		sys_rpmsg_ep_name_path << "/sys/class/rpmsg/" << rpmsg_ctrl_name << "/rpmsg" << n << "/name";
+		sys_rpmsg_ep_name_path << "/sys/class/rpmsg/" << rpmsg_ctrl_name
+							   << "/rpmsg" << n << "/name";
 
 		std::ifstream fs(sys_rpmsg_ep_name_path.str());
 		string data;
@@ -145,8 +201,8 @@ int init_rpmsg(std::ostringstream &fp_ep_dev)
 			ep_dev_name << "rpmsg" << n;
 			std::cout << "OK." << std::endl;
 			std::cout << "\t\t"
-					  << "Obtained endpoint device name: "
-					  << ep_dev_name.str() << std::endl;
+					  << "Obtained endpoint device name: " << ep_dev_name.str()
+					  << std::endl;
 			break;
 		}
 	}
@@ -167,9 +223,9 @@ int init_rpmsg(std::ostringstream &fp_ep_dev)
 	return 0;
 }
 
-unsigned char GetCRC8(const string &message)
+unsigned char CommunicationWithR5::GetCRC8(const string &message)
 {
-	const int MSB_CRC8 = 0x85;
+	const int MSB_CRC8 = 0x85; // 生成多項式(x8 + x7 + x2 + 1)
 	const char *p = message.c_str();
 	unsigned char crc8 = 0;
 
@@ -194,7 +250,7 @@ unsigned char GetCRC8(const string &message)
 	return crc8;
 }
 
-std::vector<string> SplitMessage(const string &str, const char &delimiter)
+std::vector<string> CommunicationWithR5::SplitMessage(const string &str, char delimiter)
 {
 	std::vector<string> result;
 	std::stringstream ss{str};
@@ -206,55 +262,4 @@ std::vector<string> SplitMessage(const string &str, const char &delimiter)
 	}
 
 	return result;
-}
-
-void SendMessage(const std::ostringstream &fp_ep_dev, string message)
-{
-	// CRC値の追加
-	std::ostringstream crc;
-	crc << std::setfill('0') << std::setw(3) << (int)GetCRC8(message);
-	message += ",CRC:" + crc.str() + "\n";
-
-	// メッセージの送信
-	std::ofstream fs;
-	fs.open(fp_ep_dev.str());
-	fs << message << std::endl;
-	fs.close();
-}
-
-string ReceiveMessage(const std::ostringstream &fp_ep_dev)
-{
-	string message;
-	
-
-	// メッセージの取得
-	// fs.open(fp_ep_dev.str());
-	// std::cout << "opened."<< std::endl;
-	// std::getline(fs, message);
-	// std::cout << "read."<< std::endl;
-	// fs.close();
-	// std::cout << "closed."<< std::endl;
-
-	// メッセージの取得
-	std::future<string> future = std::async(std::launch::async, [&]() {
-		std::ifstream fs;
-		string msg;
-		fs.open(fp_ep_dev.str());
-		std::getline(fs, msg);
-		fs.close();
-		return msg;
-	});
-
-	// タイムアウト処理
-	if (future.wait_for(std::chrono::milliseconds(100)) == std::future_status::timeout) {
-		std::cout << "Timeout occurred\n";
-		message = "";
-	} else {
-		message = future.get();
-	}
-
-	// TODO: CRCチェック
-
-	std::cout << "!!!\n";
-	return message;
 }
