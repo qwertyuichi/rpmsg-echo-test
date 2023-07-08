@@ -28,7 +28,7 @@ Payload ComWithR5::ReceiveMessage()
 	fs.close();
 
 	// checksumの確認
-	if (payload.checksum == calcChecksum(payload))
+	if (payload.checksum != calcChecksum(payload))
 		payload = Payload{0};
 
 	return payload;
