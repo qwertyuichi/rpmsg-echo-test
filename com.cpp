@@ -1,60 +1,57 @@
 #include "com.hpp"
 
-CommunicationWithR5::CommunicationWithR5()
+ComWithR5::ComWithR5()
 {
 	int ret = init_rpmsg(fp_ep_dev);
 	if (ret < 0)
 		throw std::runtime_error("Error: cannot initialize RPMsg");
 }
 
-void CommunicationWithR5::SendMessage(string message)
+void ComWithR5::SendMessage(Payload payload)
 {
-	// CRC値の追加
-	std::ostringstream crc;
-	crc << std::setfill('0') << std::setw(3) << (int)GetCRC8(message);
-	message += ",CRC:" + crc.str() + "\n";
 
-	// メッセージの送信
-	std::ofstream fs;
-	fs.open(fp_ep_dev.str());
-	fs << message << std::endl;
+	// checksumの計算
+	payload.checksum = calcChecksum(payload);
+
+	// payloadの送信
+	std::ofstream fs(fp_ep_dev.str(), std::ofstream::binary);
+	fs.write(reinterpret_cast<char *>(&payload), sizeof(int) * (41));
 	fs.close();
 }
 
-string CommunicationWithR5::ReceiveMessage()
+Payload ComWithR5::ReceiveMessage()
 {
-	string message;
+	Payload payload = {};
 
-	// メッセージの取得
-	std::ifstream fs;
-	fs.open(fp_ep_dev.str());
-	std::getline(fs, message);
+	std::ifstream fs(fp_ep_dev.str(), std::ifstream::binary);
+	fs.read(reinterpret_cast<char *>(&payload), sizeof(int) * (41));
 	fs.close();
 
-	// CRC値の取得
-	std::vector<string> fields = SplitMessage(message, ',');
-	int crc8 = stoi(SplitMessage(fields.back(), ':').back());
+	// checksumの確認
+	if (payload.checksum == calcChecksum(payload))
+		payload = Payload{0};
 
-	// CRCなしのメッセージを取得
-	fields.pop_back();
-	string message_without_crc = "";
-	for (auto field : fields)
-	{
-		message_without_crc += field;
-		if (field != fields.back())
-		{
-			message_without_crc += ",";
-		}
-	}
-
-	// CRC値が一致しないときは空のメッセージを返す
-	if ((int)GetCRC8(message_without_crc) != crc8)
-		return "";
-
-	return message;
+	return payload;
 }
 
-int CommunicationWithR5::init_rpmsg(std::ostringstream &fp_ep_dev)
+int ComWithR5::calcChecksum(Payload payload)
+{
+	int checksum = 0;
+	for (int i = 0; i < 9; i++)
+		checksum += payload.ball_found[i];
+	for (int i = 0; i < 9; i++)
+		checksum += payload.ball_direction[i];
+	for (int i = 0; i < 9; i++)
+		checksum += payload.ball_distance[i];
+	checksum += payload.white_line_found +
+				payload.blue_line_found +
+				payload.white_line_distance +
+				payload.blue_line_distance;
+
+	return checksum;
+}
+
+int ComWithR5::init_rpmsg(std::ostringstream &fp_ep_dev)
 {
 	int ret;
 	const string RPMSG_DEV_NAME = "virtio0.rpmsg-openamp-demo-channel.-1.0";
@@ -221,45 +218,4 @@ int CommunicationWithR5::init_rpmsg(std::ostringstream &fp_ep_dev)
 		close(fd_ep);
 
 	return 0;
-}
-
-unsigned char CommunicationWithR5::GetCRC8(const string &message)
-{
-	const int MSB_CRC8 = 0x85; // 生成多項式(x8 + x7 + x2 + 1)
-	const char *p = message.c_str();
-	unsigned char crc8 = 0;
-
-	for (int length = message.length(); length != 0; length--)
-	{
-		crc8 ^= *p++;
-
-		for (int i = 0; i < CHAR_BIT; i++)
-		{
-			if (crc8 & 0x80)
-			{
-				crc8 <<= 1;
-				crc8 ^= MSB_CRC8;
-			}
-			else
-			{
-				crc8 <<= 1;
-			}
-		}
-	}
-
-	return crc8;
-}
-
-std::vector<string> CommunicationWithR5::SplitMessage(const string &str, char delimiter)
-{
-	std::vector<string> result;
-	std::stringstream ss{str};
-	string buf;
-
-	while (std::getline(ss, buf, delimiter))
-	{
-		result.push_back(buf);
-	}
-
-	return result;
 }

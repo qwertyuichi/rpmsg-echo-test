@@ -21,28 +21,41 @@
 
 using std::string;
 
+// R5と受け渡しされるペイロード構造体
+struct Payload {
+    int ball_found[9];          // ボール認識の有無を示すステータスコード
+    int ball_direction[9];      // ターゲットの子や中心からの逸脱の程度
+    int ball_distance[9];       // ボールまでの距離
+    int ball_height[9];         // ボールの床面からの高さ[mm]
+    int white_line_found;       // 白線認識の有無を示すステータスコード
+    int white_line_distance;    // 白線までの距離 [mm]
+    int blue_line_found;        // 青線認識の有無を示すステータスコード
+    int blue_line_distance;     // 青線までの距離 [mm]
+    int checksum;              // チェックサム
+};
+
 /**
  * R5との通信まわりのクラス
  */
-class CommunicationWithR5
+class ComWithR5
 {
 public:
     /**
      * コンストラクタ
      */
-    CommunicationWithR5();
+    ComWithR5();
 
     /**
-     * R5へメッセージを送信する関数
-     * @param[in]	message 	送信するメッセージ
+     * R5へpayloadを送信する関数
+     * @param[in]	payload 	送信するpayload
      */
-    void SendMessage(string message);
+    void SendMessage(Payload payload);
 
     /**
-     * R5からメッセージを受信する関数
-     * @return		受信したメッセージ
+     * R5からpayloadを受信する関数
+     * @return		受信したpayload
      */
-    string ReceiveMessage();
+    Payload ReceiveMessage();
 
 private:
     /**
@@ -58,18 +71,10 @@ private:
     int init_rpmsg(std::ostringstream &fp_ep_dev);
 
     /**
-     * 文字列のCRC値(8bit)を計算する関数
-     * @param[in]	message CRC値(8bit)を計算する文字列
-     * @return		CRC値(8bit)
+     * @brief payloadのchecksumを計算して返す関数
+     * 
+     * @return checksum 
      */
-    unsigned char GetCRC8(const string &message);
-
-    /**
-     * 入力文字列を指定の区切り文字で分割する関数
-     * @param[in] message   入力文字列
-     * @param[in] delimiter 区切り文字
-     * @return 分割された文字列
-     */
-    std::vector<string> SplitMessage(const string &str, char delimiter);
+    int calcChecksum(Payload payload);
 };
 #endif
